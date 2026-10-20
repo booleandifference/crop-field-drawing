@@ -4,6 +4,8 @@ An interactive drawing tool that generates tractor track patterns for crop field
 
 Part of an art practice exploring computational geometry and agricultural patterns. See [PROCESS_DOCUMENTATION.md](PROCESS_DOCUMENTATION.md) for the development story.
 
+**Live demo: https://crop-field-drawing.web.app/**
+
 ## Running it
 
 No build step. Open `index.html` in a modern browser, or serve the folder:
