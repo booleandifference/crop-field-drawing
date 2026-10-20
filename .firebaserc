@@ -1,5 +1,15 @@
 {
   "projects": {
-    "default": "your-project-id"
-  }
+    "default": "stofogluft-c5ba0"
+  },
+  "targets": {
+    "stofogluft-c5ba0": {
+      "hosting": {
+        "app": [
+          "crop-field-drawing"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }
