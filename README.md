@@ -1,108 +1,91 @@
-# Crop Field Tractor Track Simulator
+# Crop Field Drawing
 
-A web-based drawing application that simulates tractor tracks in crop fields with boundaries and obstacles.
+An interactive drawing tool that generates tractor track patterns for crop fields. Draw a field boundary and obstacles, and the app fills the field with parallel tracks, headland zones and curved headland turns, ready to export as an SVG for a pen plotter.
 
-## Features
+Part of an art practice exploring computational geometry and agricultural patterns. See [PROCESS_DOCUMENTATION.md](PROCESS_DOCUMENTATION.md) for the development story.
 
-- **Interactive Drawing**: Draw field boundaries and obstacles using point-and-click
-- **Headland Buffering**: Automatically creates a buffer zone around field boundaries (1.0-2.0x track width)
-- **Obstacle Exclusion**: Creates exclusion zones around obstacles with the same buffer distance
-- **Track Generation**: Generates parallel tractor tracks that respect boundaries and avoid obstacles
-- **Auto-Angle Detection**: Automatically calculates optimal track angle based on the longest field edge
-- **Visual Headland Display**: Color-coded zones showing headland (turning area) vs working zone
-- **Customizable Settings**:
-  - Track width (10-100 pixels)
-  - Headland buffer multiplier (0.5-2.0x track width)
-  - Track angle (0-180 degrees in 15-degree increments)
-  - Auto-angle button for optimal angle calculation
+## Running it
 
-## How to Use
+No build step. Open `index.html` in a modern browser, or serve the folder:
 
-### 1. Getting Started
-Simply open `index.html` in a modern web browser (Chrome, Firefox, Edge, Safari).
-
-### 2. Drawing a Field Boundary
-1. Click the "Draw Boundary" button (active by default)
-2. Click on the canvas to add points for your field boundary
-3. **Double-click** to close the polygon and complete the boundary
-
-### 3. Adding Obstacles (Optional)
-1. Click the "Draw Obstacle" button
-2. Click on the canvas to add points for obstacles (trees, rocks, ponds, etc.)
-3. **Double-click** to close each obstacle polygon
-4. You can add multiple obstacles by repeating this process
-
-### 4. Generating Tracks
-1. Adjust the settings if desired:
-   - **Track Width**: Distance between parallel tracks
-   - **Headland Buffer**: Space around boundaries for turning (multiplier of track width)
-   - **Track Angle**: Direction of the tracks in degrees
-   - Click **"Auto"** next to Track Angle to automatically calculate the optimal angle based on your field's longest edge
-2. Click "Generate Tracks" to create the tractor path lines
-
-**Tip**: The auto-angle feature aligns tracks parallel to the longest field edge, minimizing turns and optimizing coverage!
-
-### 5. Additional Controls
-- **Clear Tracks**: Remove generated tracks while keeping boundaries and obstacles
-- **Clear All**: Reset the entire canvas
-- **Undo Last Point**: Remove the last point added to the current polygon
-
-## Technical Implementation
-
-### The Headland Rule
-Based on the Gemini analysis, the application implements a "headland" buffer zone:
-- The boundary polygon is buffered **inward** by `1.0 × Track Width` (configurable)
-- This creates a turning space for the tractor
-- Tracks never touch the red boundary line
-
-### Obstacle Exclusion Zones
-Obstacles are treated similarly to boundaries:
-- Each obstacle is buffered **outward** by the same headland distance
-- Tracks are clipped to avoid these exclusion zones
-- Creates a safe margin around obstacles
-
-### Track Generation Algorithm
-1. Calculate the "Safe Working Zone" by buffering the boundary inward
-2. Buffer all obstacles outward
-3. Generate parallel lines at the specified angle and spacing
-4. Clip lines to the working zone
-5. Remove line segments that intersect with buffered obstacles
-
-## File Structure
-
-```
-Crop field drawing app/
-├── index.html      # Main HTML structure
-├── styles.css      # Styling and layout
-├── geometry.js     # Geometry utilities (buffering, clipping, line generation)
-├── app.js          # Main application logic
-└── README.md       # This file
+```bash
+npx serve .
 ```
 
-## Browser Compatibility
+An internet connection is needed: [JSTS](https://github.com/bjornharrtell/jsts) (the geometry library) loads from a CDN.
 
-Works in all modern browsers that support:
-- HTML5 Canvas
-- ES6+ JavaScript (classes, arrow functions, etc.)
+## How to use
 
-## Future Enhancements
+### Draw
+| Action | Input |
+|---|---|
+| Add a point | Click |
+| Close the polygon | Double-click |
+| Remove the last point | **Undo Last Point** |
+| Zoom | Mouse wheel |
+| Pan | Middle-mouse drag, or Ctrl + left drag |
 
-Potential improvements:
-- Save/load field configurations (JSON export/import)
-- Field decomposition for complex polygons (split into convex sub-regions)
-- Auto-angle detection (align to longest edge)
-- Multiple track patterns (alternating angles, spiral, etc.)
-- Real-world units (meters instead of pixels)
-- Image import for tracing existing fields
+1. **Draw Boundary** (default mode): click out the field outline and double-click to close it.
+2. **Draw Obstacle**: once the boundary is closed, draw any number of obstacles (trees, ponds, pylons) inside it, double-clicking to close each one.
 
-## Based on Gemini Analysis
+Coordinates are in metres. The header shows zoom level and cursor position.
 
-This application implements the geometric logic derived from analyzing 17 crop field drawings, with the key principles:
-- Headland buffer = 1.0-1.2 × Track Width
-- Obstacle buffer = same as headland
-- Parallel track spacing = Track Width
-- Tracks never touch boundaries or obstacles
+### Generate
+Click **Generate Tracks**. After that, changing a setting regenerates the tracks right away.
 
-## License
+| Setting | Meaning |
+|---|---|
+| Track Width (m) | Spacing between parallel tracks (0.5–10, default 3) |
+| Headland Buffer (× track width) | How far the working zone is pulled in from the boundary, and how far obstacles are pushed out (0.5–2.0) |
+| Track Angle (°) | Track direction. **Auto** aligns tracks with the longest boundary edge, rounded to 15° |
+| Reference Point Distance (× track width) | How far the turn's construction points sit from where a track meets the edge |
+| Wheel Track Pattern | Min/max dash and gap lengths (px) for the random dashed wheel-track lines |
 
-Free to use and modify for educational and agricultural purposes.
+### Show / hide
+Each layer can be toggled on its own:
+
+- **Curves:** tracks, headland turns, working zone, buffered obstacles, wheel tracks
+- **Visual aids:** angles, distances, reference points, Bézier control points, track labels (A, B, C… with lengths)
+
+### Import / export
+- **Export JSON / Import JSON:** saves and loads the boundary, obstacles and track settings.
+- **Export SVG:** writes the visible layers as an SVG on a white background for pen plotting. Only layers that are switched on are exported, and the SVG uses the current zoom and pan (screen pixels, not metres).
+
+## How it works
+
+1. **Working zone.** The boundary is buffered inward by `track width × headland buffer` with JSTS, then the corners are filleted.
+2. **Obstacle exclusion.** Each obstacle is buffered outward by the same distance with rounded joins.
+3. **Tracks.** Parallel lines at the chosen angle are swept across the field, clipped to the working zone, and cut wherever they cross a buffered obstacle.
+4. **Reference points.** Wherever a track meets the working-zone edge or an obstacle, three construction points are placed:
+   - the intersection point
+   - an extension point back along the track
+   - guide points found by walking along the edge in both directions
+5. **Headland turns.** A cubic Bézier curve runs from the extension point to each guide point. Its control points sit at the midpoints between the intersection point and each end, a rule worked out by testing in Rhino.
+
+The turns are drawn as a visual pattern: each intersection gets curves in both directions, so they don't form a single continuous tractor route.
+
+## Project structure
+
+```
+├── index.html               UI and canvas
+├── styles.css               Dark monospace styling
+├── viewport.js              Pan/zoom and world (m) ↔ screen (px) conversion
+├── geometry.js              GeometryUtils: buffering, clipping, tracks, reference points, curves
+├── app.js                   CropFieldApp: input, state, rendering, import/export
+├── test.html                Script-loading smoke test
+├── functions/               Python Firebase Cloud Functions (Shapely): track and angle calculation
+├── firebase.json            Firebase Hosting + Functions config
+├── firebase-config.js       Firestore save/load helpers (commented out)
+├── FIREBASE_DEPLOYMENT.md   Deployment guide
+└── FIREBASE_QUICKSTART.md   Quick Firebase setup
+```
+
+The Firebase pieces are optional and not wired up yet. The app runs entirely in the browser, and `.firebaserc` still has a placeholder project ID.
+
+## Ideas
+
+- Join the turns into one continuous tractor route
+- Export SVG in real-world units (mm/m) regardless of zoom
+- Other turn styles (omega, teardrop, fish-hook) and multiple headland passes
+- Import real field boundaries (GeoJSON, GPS)
+- Animate a tractor driving the pattern
