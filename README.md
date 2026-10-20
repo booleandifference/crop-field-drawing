@@ -68,7 +68,7 @@ The turns are drawn as a visual pattern: each intersection gets curves in both d
 
 ```
 ├── index.html               UI and canvas
-├── styles.css               Dark monospace styling
+├── styles.css               Paper/pencil drafting-table styling
 ├── viewport.js              Pan/zoom and world (m) ↔ screen (px) conversion
 ├── geometry.js              GeometryUtils: buffering, clipping, tracks, reference points, curves
 ├── app.js                   CropFieldApp: input, state, rendering, import/export

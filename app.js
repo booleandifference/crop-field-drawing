@@ -85,6 +85,9 @@ class CropFieldApp {
         console.log('First render...');
         this.render();
 
+        // Canvas text uses web fonts, so redraw once they have loaded
+        document.fonts.ready.then(() => this.render());
+
         console.log('CropFieldApp initialized successfully!');
     }
 
@@ -92,10 +95,9 @@ class CropFieldApp {
         const container = this.canvas.parentElement;
         const rect = container.getBoundingClientRect();
 
-        // Set canvas size to exactly match container (accounting for borders)
-        // Container has 1px border on all sides
-        this.canvas.width = rect.width - 2;
-        this.canvas.height = rect.height - 2;
+        // Set canvas size to exactly match the container (it has no border)
+        this.canvas.width = Math.floor(rect.width);
+        this.canvas.height = Math.floor(rect.height);
 
         // Update viewport canvas reference
         if (this.viewport) {
@@ -259,6 +261,29 @@ class CropFieldApp {
         document.getElementById('exportSvgBtn').addEventListener('click', () => {
             this.exportToSVG();
         });
+
+        // Hide all / Show all for each checkbox section (Layers, Visual aids)
+        for (const button of document.querySelectorAll('.toggle-all')) {
+            const boxes = [...button.closest('.control-section').querySelectorAll('input[type="checkbox"]')];
+            const updateLabel = () => {
+                button.textContent = boxes.some(box => box.checked) ? 'Hide all' : 'Show all';
+            };
+
+            button.addEventListener('click', () => {
+                const show = !boxes.some(box => box.checked);
+                for (const box of boxes) {
+                    if (box.checked !== show) {
+                        box.checked = show;
+                        box.dispatchEvent(new Event('change'));
+                    }
+                }
+            });
+
+            for (const box of boxes) {
+                box.addEventListener('change', updateLabel);
+            }
+            updateLabel();
+        }
 
         // Canvas events
         this.canvas.addEventListener('click', (e) => this.handleClick(e));
@@ -601,91 +626,66 @@ class CropFieldApp {
             }
 
             // Draw wheel tracks (if enabled)
-            // Note: Wheel tracks are ONLY drawn if their parent elements are also enabled
-            if (this.showWheelTracks) {
+            // Mirrors drawWheelTracks(): same shapes and the same seeded random dash patterns
+            if (this.showWheelTracks && this.tracks && this.tracks.length > 0) {
                 const wheelOffset = this.trackWidth / 10;
+                const dashArray = (seed) => this.generateRandomDashPattern(seed, this.minDash, this.maxDash, this.minGap, this.maxGap, 30)
+                    .map(v => v.toFixed(2)).join(',');
+                const pushWheelPath = (points, seed, closed) => {
+                    if (points.length === 0) return;
+                    const path = closed ? pointsToPath(points) : pointsToPolyline(points);
+                    svgParts.push(`<path d="${path}" stroke="#000000" stroke-width="0.5" stroke-dasharray="${dashArray(seed)}" fill="none"/>`);
+                };
 
-                // Working zone wheel tracks (only if working zone is also shown)
-                if (this.showWorkingZone && this.workingZone && this.workingZone.length > 0) {
-                    const leftTrack = GeometryUtils.offsetPolyline(this.workingZone, wheelOffset);
-                    const rightTrack = GeometryUtils.offsetPolyline(this.workingZone, -wheelOffset);
-
-                    if (leftTrack.length > 0) {
-                        const path = pointsToPolyline(leftTrack);
-                        const firstPoint = this.viewport.worldToScreen(leftTrack[0].x, leftTrack[0].y);
-                        svgParts.push(`<path d="${path} L ${firstPoint.x} ${firstPoint.y}" stroke="#000000" stroke-width="0.5" stroke-dasharray="5,8" fill="none"/>`);
-                    }
-                    if (rightTrack.length > 0) {
-                        const path = pointsToPolyline(rightTrack);
-                        const firstPoint = this.viewport.worldToScreen(rightTrack[0].x, rightTrack[0].y);
-                        svgParts.push(`<path d="${path} L ${firstPoint.x} ${firstPoint.y}" stroke="#000000" stroke-width="0.5" stroke-dasharray="5,8" fill="none"/>`);
-                    }
+                // Working zone wheel tracks
+                if (this.workingZone && this.workingZone.length > 0) {
+                    pushWheelPath(GeometryUtils.offsetPolyline(this.workingZone, wheelOffset), 1001, true);
+                    pushWheelPath(GeometryUtils.offsetPolyline(this.workingZone, -wheelOffset), 2002, true);
                 }
 
-                // Buffered obstacles wheel tracks (only if buffered obstacles are also shown)
-                if (this.showBufferedObstacles && this.bufferedObstacles && this.bufferedObstacles.length > 0) {
+                // Buffered obstacles wheel tracks
+                if (this.bufferedObstacles && this.bufferedObstacles.length > 0) {
                     for (let i = 0; i < this.bufferedObstacles.length; i++) {
                         const obstacle = this.bufferedObstacles[i];
                         if (!obstacle || obstacle.length < 3) continue;
 
-                        const leftTrack = GeometryUtils.offsetPolyline(obstacle, wheelOffset);
-                        const rightTrack = GeometryUtils.offsetPolyline(obstacle, -wheelOffset);
-
-                        if (leftTrack.length > 0) {
-                            const path = pointsToPolyline(leftTrack);
-                            const firstPoint = this.viewport.worldToScreen(leftTrack[0].x, leftTrack[0].y);
-                            svgParts.push(`<path d="${path} L ${firstPoint.x} ${firstPoint.y}" stroke="#000000" stroke-width="0.5" stroke-dasharray="5,8" fill="none"/>`);
-                        }
-                        if (rightTrack.length > 0) {
-                            const path = pointsToPolyline(rightTrack);
-                            const firstPoint = this.viewport.worldToScreen(rightTrack[0].x, rightTrack[0].y);
-                            svgParts.push(`<path d="${path} L ${firstPoint.x} ${firstPoint.y}" stroke="#000000" stroke-width="0.5" stroke-dasharray="5,8" fill="none"/>`);
-                        }
+                        pushWheelPath(GeometryUtils.offsetPolyline(obstacle, wheelOffset), 7000 + i * 2, true);
+                        pushWheelPath(GeometryUtils.offsetPolyline(obstacle, -wheelOffset), 8000 + i * 2, true);
                     }
                 }
 
-                // Straight tracks wheel tracks (only if tracks are also shown)
-                if (this.showTracks && this.tracks && this.tracks.length > 0) {
-                    for (let i = 0; i < this.tracks.length; i++) {
-                        const track = this.tracks[i];
-                        if (!track || !Array.isArray(track) || track.length !== 2) continue;
+                // Straight tracks wheel tracks
+                for (let i = 0; i < this.tracks.length; i++) {
+                    const track = this.tracks[i];
+                    if (!track || !Array.isArray(track) || track.length !== 2) continue;
 
-                        const [start, end] = track;
-                        if (!start || !end) continue;
+                    const [start, end] = track;
+                    if (!start || !end) continue;
 
-                        const leftTrack = GeometryUtils.offsetLine(start, end, wheelOffset);
-                        const rightTrack = GeometryUtils.offsetLine(start, end, -wheelOffset);
-
-                        const screenLeft1 = this.viewport.worldToScreen(leftTrack[0].x, leftTrack[0].y);
-                        const screenLeft2 = this.viewport.worldToScreen(leftTrack[1].x, leftTrack[1].y);
-                        svgParts.push(`<line x1="${screenLeft1.x}" y1="${screenLeft1.y}" x2="${screenLeft2.x}" y2="${screenLeft2.y}" stroke="#000000" stroke-width="0.5" stroke-dasharray="5,8"/>`);
-
-                        const screenRight1 = this.viewport.worldToScreen(rightTrack[0].x, rightTrack[0].y);
-                        const screenRight2 = this.viewport.worldToScreen(rightTrack[1].x, rightTrack[1].y);
-                        svgParts.push(`<line x1="${screenRight1.x}" y1="${screenRight1.y}" x2="${screenRight2.x}" y2="${screenRight2.y}" stroke="#000000" stroke-width="0.5" stroke-dasharray="5,8"/>`);
-                    }
+                    pushWheelPath(GeometryUtils.offsetLine(start, end, wheelOffset), 3000 + i * 2, false);
+                    pushWheelPath(GeometryUtils.offsetLine(start, end, -wheelOffset), 4000 + i * 2, false);
                 }
 
-                // Headland turns wheel tracks (only if headland turns are also shown)
-                if (this.showHeadlandTurns && this.headlandTurns && this.headlandTurns.length > 0) {
+                // Headland turns wheel tracks
+                if (this.headlandTurns && this.headlandTurns.length > 0) {
                     for (let i = 0; i < this.headlandTurns.length; i++) {
                         const turnData = this.headlandTurns[i];
                         const turn = turnData.points || turnData;
                         if (!turn || turn.length < 2) continue;
 
-                        const leftTrack = GeometryUtils.offsetPolyline(turn, wheelOffset);
-                        const rightTrack = GeometryUtils.offsetPolyline(turn, -wheelOffset);
-
-                        if (leftTrack.length > 0) {
-                            const path = pointsToPolyline(leftTrack);
-                            svgParts.push(`<path d="${path}" stroke="#000000" stroke-width="0.5" stroke-dasharray="5,8" fill="none"/>`);
-                        }
-                        if (rightTrack.length > 0) {
-                            const path = pointsToPolyline(rightTrack);
-                            svgParts.push(`<path d="${path}" stroke="#000000" stroke-width="0.5" stroke-dasharray="5,8" fill="none"/>`);
-                        }
+                        pushWheelPath(GeometryUtils.offsetPolyline(turn, wheelOffset), 5000 + i * 2, false);
+                        pushWheelPath(GeometryUtils.offsetPolyline(turn, -wheelOffset), 6000 + i * 2, false);
                     }
                 }
+            }
+
+            // Draw field boundary and obstacles (always visible on the canvas)
+            if (this.boundaryPoints.length > 0) {
+                const path = this.boundaryComplete ? pointsToPath(this.boundaryPoints) : pointsToPolyline(this.boundaryPoints);
+                svgParts.push(`<path d="${path}" stroke="#000000" stroke-width="1.5" fill="none"/>`);
+            }
+            for (const obstacle of this.obstacles) {
+                svgParts.push(`<path d="${pointsToPath(obstacle)}" stroke="#000000" stroke-width="1.5" fill="none"/>`);
             }
 
             // Draw reference points (if enabled)
@@ -804,7 +804,7 @@ class CropFieldApp {
             }
 
             // Draw control points (if enabled)
-            if (this.showControlPoints && this.headlandTurns && this.headlandTurns.length > 0) {
+            if (this.showHeadlandTurns && this.showControlPoints && this.headlandTurns && this.headlandTurns.length > 0) {
                 for (const turnData of this.headlandTurns) {
                     if (turnData.controlPoints && turnData.startPoint && turnData.endPoint) {
                         const { cp1, cp2 } = turnData.controlPoints;
@@ -827,7 +827,7 @@ class CropFieldApp {
             }
 
             // Draw track labels (if enabled)
-            if (this.showTrackLabels && this.tracks && this.tracks.length > 0) {
+            if (this.showTracks && this.showTrackLabels && this.tracks && this.tracks.length > 0) {
                 const labels = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
                 for (let i = 0; i < this.tracks.length; i++) {
                     const track = this.tracks[i];
@@ -937,9 +937,8 @@ class CropFieldApp {
             return;
         }
 
-        // Clear canvas with black background
-        this.ctx.fillStyle = '#000000';
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        // Clear canvas so the paper sheet shows through
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
         // Draw tracks first (so they appear behind everything)
         if (this.showTracks && this.tracks && this.tracks.length > 0) {
@@ -953,12 +952,12 @@ class CropFieldApp {
 
         // Draw headland area (space between boundary and working zone)
         if (this.boundaryComplete && this.boundaryPoints.length > 0) {
-            // Draw full field area with subtle fill
-            this.drawPolygon(this.boundaryPoints, null, 0, 'rgba(38, 38, 38, 0.15)'); // Very subtle fill
+            // Faint green wash over the whole field
+            this.drawPolygon(this.boundaryPoints, null, 0, 'rgba(85, 139, 47, 0.06)');
 
             // Draw working zone on top
             if (this.showWorkingZone && this.workingZone && this.workingZone.length > 0) {
-                this.drawPolygon(this.workingZone, '#525252', 1, 'rgba(82, 82, 82, 0.05)'); // Subtle gray working zone
+                this.drawPolygon(this.workingZone, '#7c807e', 1);
             }
         }
 
@@ -966,7 +965,7 @@ class CropFieldApp {
         if (this.showBufferedObstacles && this.bufferedObstacles && this.bufferedObstacles.length > 0) {
             for (const obstacle of this.bufferedObstacles) {
                 if (obstacle && obstacle.length > 0) {
-                    this.drawPolygon(obstacle, '#737373', 1, 'rgba(115, 115, 115, 0.08)');
+                    this.drawPolygon(obstacle, '#a39d92', 1, 'rgba(163, 157, 146, 0.12)');
                 }
             }
         }
@@ -975,14 +974,14 @@ class CropFieldApp {
         if (this.boundaryPoints.length > 0) {
             this.drawPolygon(
                 this.boundaryPoints,
-                '#f87171', // Error red from design system
+                '#c62828',
                 1.5,
-                this.boundaryComplete ? null : 'rgba(248, 113, 113, 0.05)'
+                this.boundaryComplete ? null : 'rgba(198, 40, 40, 0.05)'
             );
 
             // Draw preview line if not complete
             if (!this.boundaryComplete && this.mouseX !== undefined && this.mouseWorldX !== undefined) {
-                this.ctx.strokeStyle = '#f87171';
+                this.ctx.strokeStyle = '#c62828';
                 this.ctx.lineWidth = 1;
                 this.ctx.setLineDash([3, 3]);
                 this.ctx.beginPath();
@@ -998,16 +997,16 @@ class CropFieldApp {
 
         // Draw completed obstacles (blue, thin line)
         for (const obstacle of this.obstacles) {
-            this.drawPolygon(obstacle, '#60a5fa', 1.5, 'rgba(96, 165, 250, 0.05)'); // Blue from palette
+            this.drawPolygon(obstacle, '#1565c0', 1.5, 'rgba(21, 101, 192, 0.06)');
         }
 
         // Draw current obstacle being drawn
         if (this.currentObstacle.length > 0) {
-            this.drawPolygon(this.currentObstacle, '#60a5fa', 1.5);
+            this.drawPolygon(this.currentObstacle, '#1565c0', 1.5);
 
             // Draw preview line
             if (this.mouseX !== undefined && this.mouseWorldX !== undefined) {
-                this.ctx.strokeStyle = '#60a5fa';
+                this.ctx.strokeStyle = '#1565c0';
                 this.ctx.lineWidth = 1;
                 this.ctx.setLineDash([3, 3]);
                 this.ctx.beginPath();
@@ -1026,17 +1025,26 @@ class CropFieldApp {
             this.drawWheelTracks();
         }
 
+        // Control points and track labels go on top of the lines
+        if (this.showHeadlandTurns && this.showControlPoints && this.headlandTurns.length > 0) {
+            this.drawControlPoints();
+        }
+
+        if (this.showTracks && this.showTrackLabels && this.tracks.length > 0) {
+            this.drawTrackLabels();
+        }
+
         // Draw reference points (intersection, extension, and guide points)
         if (this.tracks && this.tracks.length > 0) {
             this.drawReferencePoints();
         }
 
         // Draw points (subtle, smaller)
-        this.drawPoints(this.boundaryPoints, '#f87171');
+        this.drawPoints(this.boundaryPoints, '#c62828');
         for (const obstacle of this.obstacles) {
-            this.drawPoints(obstacle, '#60a5fa');
+            this.drawPoints(obstacle, '#1565c0');
         }
-        this.drawPoints(this.currentObstacle, '#60a5fa');
+        this.drawPoints(this.currentObstacle, '#1565c0');
     }
 
     drawPolygon(points, strokeColor, lineWidth = 2, fillColor = null) {
@@ -1082,8 +1090,8 @@ class CropFieldApp {
             this.ctx.arc(screenPos.x, screenPos.y, 3, 0, Math.PI * 2);
             this.ctx.fill();
 
-            // Subtle dark outline
-            this.ctx.strokeStyle = '#000000';
+            // Thin sheet-coloured outline so points read on top of lines
+            this.ctx.strokeStyle = '#fbf8f1';
             this.ctx.lineWidth = 1;
             this.ctx.stroke();
         }
@@ -1092,14 +1100,10 @@ class CropFieldApp {
     drawTracks() {
         if (!this.tracks || this.tracks.length === 0) return;
 
-        this.ctx.strokeStyle = '#d4d4d4'; // Primary text color
+        this.ctx.strokeStyle = '#2f2c28'; // Graphite
         this.ctx.lineWidth = 1.5;
 
-        // Generate track labels A, B, C, etc.
-        const labels = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-
-        for (let i = 0; i < this.tracks.length; i++) {
-            const track = this.tracks[i];
+        for (const track of this.tracks) {
             if (!track || !Array.isArray(track) || track.length !== 2) continue;
 
             const [start, end] = track;
@@ -1109,54 +1113,66 @@ class CropFieldApp {
             const screenStart = this.viewport.worldToScreen(start.x, start.y);
             const screenEnd = this.viewport.worldToScreen(end.x, end.y);
 
-            // Draw track line
             this.ctx.beginPath();
             this.ctx.moveTo(screenStart.x, screenStart.y);
             this.ctx.lineTo(screenEnd.x, screenEnd.y);
             this.ctx.stroke();
+        }
+    }
 
-            // Draw label at midpoint of track (if enabled)
-            if (this.showTrackLabels) {
-                // Calculate track length in METERS (world coordinates)
-                const length = Math.sqrt(
-                    (end.x - start.x) ** 2 + (end.y - start.y) ** 2
-                );
+    drawTrackLabels() {
+        // Generate track labels A, B, C, etc.
+        const labels = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
-                const midX = (screenStart.x + screenEnd.x) / 2;
-                const midY = (screenStart.y + screenEnd.y) / 2;
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
 
-                const label = i < labels.length ? labels[i] : `T${i + 1}`;
+        for (let i = 0; i < this.tracks.length; i++) {
+            const track = this.tracks[i];
+            if (!track || !Array.isArray(track) || track.length !== 2) continue;
 
-                // Draw label background (dark theme)
-                this.ctx.fillStyle = 'rgba(10, 10, 10, 0.95)';
-                this.ctx.font = '12px "Courier New", monospace';
-                const textMetrics = this.ctx.measureText(label);
-                const textWidth = textMetrics.width;
+            const [start, end] = track;
+            if (!start || !end || start.x === undefined || end.x === undefined) continue;
 
-                // Background with border
-                this.ctx.fillRect(midX - textWidth / 2 - 6, midY - 20, textWidth + 12, 28);
-                this.ctx.strokeStyle = '#262626';
-                this.ctx.lineWidth = 1;
-                this.ctx.strokeRect(midX - textWidth / 2 - 6, midY - 20, textWidth + 12, 28);
+            const screenStart = this.viewport.worldToScreen(start.x, start.y);
+            const screenEnd = this.viewport.worldToScreen(end.x, end.y);
 
-                // Draw label text (primary text color)
-                this.ctx.fillStyle = '#d4d4d4';
-                this.ctx.textAlign = 'center';
-                this.ctx.textBaseline = 'middle';
-                this.ctx.fillText(label, midX, midY - 9);
+            // Calculate track length in METERS (world coordinates)
+            const length = Math.sqrt(
+                (end.x - start.x) ** 2 + (end.y - start.y) ** 2
+            );
 
-                // Draw length dimension below label in METERS
-                this.ctx.font = '9px "Courier New", monospace';
-                this.ctx.fillStyle = '#737373';
-                this.ctx.fillText(length.toFixed(1) + 'm', midX, midY + 5);
-            }
+            const midX = (screenStart.x + screenEnd.x) / 2;
+            const midY = (screenStart.y + screenEnd.y) / 2;
+
+            const label = i < labels.length ? labels[i] : `T${i + 1}`;
+            const lengthText = length.toFixed(1) + 'm';
+
+            // Key-cap label: white fill, thin black border
+            this.ctx.font = '300 7px "Martian Mono", monospace';
+            const boxWidth = Math.max(this.ctx.measureText(lengthText).width, 10) + 10;
+
+            this.ctx.fillStyle = '#ffffff';
+            this.ctx.fillRect(midX - boxWidth / 2, midY - 15, boxWidth, 26);
+            this.ctx.strokeStyle = '#1a1a1a';
+            this.ctx.lineWidth = 1;
+            this.ctx.strokeRect(Math.round(midX - boxWidth / 2) + 0.5, Math.round(midY - 15) + 0.5, Math.round(boxWidth), 26);
+
+            this.ctx.fillStyle = '#111111';
+            this.ctx.font = '400 10px "Martian Mono", monospace';
+            this.ctx.fillText(label, midX, midY - 6);
+
+            // Length dimension below label in METERS
+            this.ctx.font = '300 7px "Martian Mono", monospace';
+            this.ctx.fillStyle = '#666666';
+            this.ctx.fillText(lengthText, midX, midY + 5);
         }
     }
 
     drawHeadlandTurns() {
         if (!this.headlandTurns || this.headlandTurns.length === 0) return;
 
-        this.ctx.strokeStyle = '#a3a3a3'; // Secondary text color for turns
+        this.ctx.strokeStyle = '#4d4943'; // Softer graphite for turns
         this.ctx.lineWidth = 1;
         this.ctx.setLineDash([4, 4]); // Dashed line for turns
 
@@ -1178,15 +1194,19 @@ class CropFieldApp {
             }
 
             this.ctx.stroke();
+        }
 
-            // Draw control points if available and enabled
-            if (this.showControlPoints && turnData.controlPoints && turnData.startPoint && turnData.endPoint) {
+        this.ctx.setLineDash([]); // Reset dash
+    }
+
+    drawControlPoints() {
+        for (const turnData of this.headlandTurns) {
+            if (turnData.controlPoints && turnData.startPoint && turnData.endPoint) {
                 const { cp1, cp2 } = turnData.controlPoints;
                 const { startPoint, endPoint } = turnData;
 
                 // Draw lines from start/end points to their control points
-                this.ctx.setLineDash([]); // Solid lines for control point connections
-                this.ctx.strokeStyle = '#fbbf24'; // Yellow for control point lines
+                this.ctx.strokeStyle = '#c75600'; // Amber for control point lines
                 this.ctx.lineWidth = 1;
 
                 // Line from start to cp1
@@ -1205,24 +1225,18 @@ class CropFieldApp {
                 this.ctx.lineTo(screenCp2.x, screenCp2.y);
                 this.ctx.stroke();
 
-                // Draw control point circles
-                this.ctx.fillStyle = '#fbbf24'; // Yellow for control points
+                // Draw control points as crisp rings
+                this.ctx.fillStyle = '#ffffff';
+                this.ctx.lineWidth = 1.1;
 
-                // cp1
-                this.ctx.beginPath();
-                this.ctx.arc(screenCp1.x, screenCp1.y, 4, 0, Math.PI * 2);
-                this.ctx.fill();
-
-                // cp2
-                this.ctx.beginPath();
-                this.ctx.arc(screenCp2.x, screenCp2.y, 4, 0, Math.PI * 2);
-                this.ctx.fill();
-
-                this.ctx.setLineDash([4, 4]); // Restore dash for next curve
+                for (const cp of [screenCp1, screenCp2]) {
+                    this.ctx.beginPath();
+                    this.ctx.arc(cp.x, cp.y, 3.5, 0, Math.PI * 2);
+                    this.ctx.fill();
+                    this.ctx.stroke();
+                }
             }
         }
-
-        this.ctx.setLineDash([]); // Reset dash
     }
 
     /**
@@ -1251,7 +1265,7 @@ class CropFieldApp {
     drawWheelTracks() {
         const wheelOffset = this.trackWidth / 10; // Offset distance for wheel tracks
 
-        this.ctx.strokeStyle = '#737373'; // Dark gray for wheel tracks
+        this.ctx.strokeStyle = '#4d4943'; // Soft graphite for wheel tracks
         this.ctx.lineWidth = 0.5;
 
         // Draw wheel tracks for working zone curve
@@ -1470,7 +1484,7 @@ class CropFieldApp {
                 const p = item.point;
                 if (!p) continue;
 
-                drawCross(p.x, p.y, '#f87171', 2); // Error red from design system
+                drawCross(p.x, p.y, '#c62828', 1.5); // Boundary red
             }
         }
 
@@ -1480,7 +1494,7 @@ class CropFieldApp {
                 const p = item.point;
                 if (!p) continue;
 
-                drawCross(p.x, p.y, '#525252', 1.5); // Muted color from design system
+                drawCross(p.x, p.y, '#7c807e', 1.2); // Muted
 
                 // Draw line connecting to intersection point
                 if (item.intersectionPoint) {
@@ -1490,7 +1504,7 @@ class CropFieldApp {
                         item.intersectionPoint.y
                     );
 
-                    this.ctx.strokeStyle = '#262626'; // Border light
+                    this.ctx.strokeStyle = '#cdd6dd'; // Rule blue-grey
                     this.ctx.lineWidth = 1;
                     this.ctx.setLineDash([3, 3]);
                     this.ctx.beginPath();
@@ -1508,7 +1522,7 @@ class CropFieldApp {
                 const p = item.point;
                 if (!p) continue;
 
-                drawCross(p.x, p.y, '#737373', 1.5); // Tertiary text color
+                drawCross(p.x, p.y, '#7c807e', 1.2); // Muted
 
                 // Draw line connecting to intersection point
                 if (item.intersectionPoint) {
@@ -1518,7 +1532,7 @@ class CropFieldApp {
                         item.intersectionPoint.y
                     );
 
-                    this.ctx.strokeStyle = '#262626'; // Border light
+                    this.ctx.strokeStyle = '#cdd6dd'; // Rule blue-grey
                     this.ctx.lineWidth = 1;
                     this.ctx.setLineDash([3, 3]);
                     this.ctx.beginPath();
@@ -1532,7 +1546,7 @@ class CropFieldApp {
 
         // Draw angle labels from intersection groups
         if (this.showAngles && intersectionGroups && intersectionGroups.length > 0) {
-            this.ctx.font = '10px "Courier New", monospace';
+            this.ctx.font = '300 8.5px "Martian Mono", monospace';
             this.ctx.textAlign = 'center';
             this.ctx.textBaseline = 'middle';
 
@@ -1548,7 +1562,7 @@ class CropFieldApp {
                     const textWidth = this.ctx.measureText(angleText).width;
                     const padding = 4;
 
-                    this.ctx.fillStyle = '#0a0a0a'; // Background from design system
+                    this.ctx.fillStyle = 'rgba(251, 248, 241, 0.92)'; // Sheet
                     this.ctx.fillRect(
                         screenPos.x - textWidth / 2 - padding,
                         screenPos.y - 18,
@@ -1557,7 +1571,7 @@ class CropFieldApp {
                     );
 
                     // Draw angle text
-                    this.ctx.fillStyle = '#4ade80'; // Success green from design system
+                    this.ctx.fillStyle = '#2e7d32'; // Field green
                     this.ctx.fillText(angleText, screenPos.x, screenPos.y - 10);
                 }
 
@@ -1570,7 +1584,7 @@ class CropFieldApp {
                     const textWidth = this.ctx.measureText(angleText).width;
                     const padding = 4;
 
-                    this.ctx.fillStyle = '#0a0a0a'; // Background from design system
+                    this.ctx.fillStyle = 'rgba(251, 248, 241, 0.92)'; // Sheet
                     this.ctx.fillRect(
                         screenPos.x - textWidth / 2 - padding,
                         screenPos.y - 18,
@@ -1579,7 +1593,7 @@ class CropFieldApp {
                     );
 
                     // Draw angle text
-                    this.ctx.fillStyle = '#4ade80'; // Success green from design system
+                    this.ctx.fillStyle = '#2e7d32'; // Field green
                     this.ctx.fillText(angleText, screenPos.x, screenPos.y - 10);
                 }
             }
@@ -1587,7 +1601,7 @@ class CropFieldApp {
 
         // Draw distance labels from intersection to each reference point
         if (this.showDistances && intersectionGroups && intersectionGroups.length > 0) {
-            this.ctx.font = '9px "Courier New", monospace';
+            this.ctx.font = '300 7.5px "Martian Mono", monospace';
             this.ctx.textAlign = 'center';
             this.ctx.textBaseline = 'middle';
 
@@ -1612,7 +1626,7 @@ class CropFieldApp {
                     const textWidth = this.ctx.measureText(distText).width;
                     const padding = 3;
 
-                    this.ctx.fillStyle = '#0a0a0a'; // Background
+                    this.ctx.fillStyle = 'rgba(251, 248, 241, 0.92)'; // Sheet
                     this.ctx.fillRect(
                         screenMid.x - textWidth / 2 - padding,
                         screenMid.y - 8,
@@ -1620,7 +1634,7 @@ class CropFieldApp {
                         14
                     );
 
-                    this.ctx.fillStyle = '#737373'; // Muted color for distance
+                    this.ctx.fillStyle = '#7c807e'; // Muted
                     this.ctx.fillText(distText, screenMid.x, screenMid.y);
                 }
 
@@ -1640,7 +1654,7 @@ class CropFieldApp {
                     const textWidth = this.ctx.measureText(distText).width;
                     const padding = 3;
 
-                    this.ctx.fillStyle = '#0a0a0a'; // Background
+                    this.ctx.fillStyle = 'rgba(251, 248, 241, 0.92)'; // Sheet
                     this.ctx.fillRect(
                         screenMid.x - textWidth / 2 - padding,
                         screenMid.y - 8,
@@ -1648,7 +1662,7 @@ class CropFieldApp {
                         14
                     );
 
-                    this.ctx.fillStyle = '#737373'; // Muted color for distance
+                    this.ctx.fillStyle = '#7c807e'; // Muted
                     this.ctx.fillText(distText, screenMid.x, screenMid.y);
                 }
 
@@ -1668,7 +1682,7 @@ class CropFieldApp {
                     const textWidth = this.ctx.measureText(distText).width;
                     const padding = 3;
 
-                    this.ctx.fillStyle = '#0a0a0a'; // Background
+                    this.ctx.fillStyle = 'rgba(251, 248, 241, 0.92)'; // Sheet
                     this.ctx.fillRect(
                         screenMid.x - textWidth / 2 - padding,
                         screenMid.y - 8,
@@ -1676,7 +1690,7 @@ class CropFieldApp {
                         14
                     );
 
-                    this.ctx.fillStyle = '#737373'; // Muted color for distance
+                    this.ctx.fillStyle = '#7c807e'; // Muted
                     this.ctx.fillText(distText, screenMid.x, screenMid.y);
                 }
             }
