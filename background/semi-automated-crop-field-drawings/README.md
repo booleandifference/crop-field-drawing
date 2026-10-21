@@ -4,10 +4,7 @@ Background material for this app, archived from the studio output [Semi-automate
 
 The pen plots were made by tracing field perimeters from aerial photographs in Rhino, then running a Grasshopper script for the double lines and texture. This repository is the browser version of that process: draw a boundary, generate tractor tracks, export an SVG for the plotter.
 
-The Rhino model and Grasshopper definition are in [Rhino plus grasshopper](../Rhino%20plus%20grasshopper):
-
-- `semi automated crop foeld drawings v1.3dm`
-- `semi automated crop field drawings v1.gh`
+The Rhino model and Grasshopper definition, and a note on how the web app follows that logic, are in [Rhino plus grasshopper](../Rhino%20plus%20grasshopper/README.md).
 
 Captions are as published on the studio page. Photographs are by msn.
 
