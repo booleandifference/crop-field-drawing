@@ -2,7 +2,7 @@
 
 An interactive drawing tool that generates tractor track patterns for crop fields. Draw a field boundary and obstacles, and the app fills the field with parallel tracks, headland zones and curved headland turns, ready to export as an SVG for a pen plotter.
 
-Part of an art practice exploring computational geometry and agricultural patterns. The pen-plot series this app continues is archived in [background/semi-automated-crop-field-drawings](background/semi-automated-crop-field-drawings/README.md). See [PROCESS_DOCUMENTATION.md](PROCESS_DOCUMENTATION.md) for the development story.
+Part of an art practice exploring computational geometry and agricultural patterns. The pen-plot series this app continues is archived in [background/semi-automated-crop-field-drawings](background/semi-automated-crop-field-drawings/README.md). The Rhino model and Grasshopper definition those plots were drawn from are in [background/Rhino plus grasshopper](background/Rhino%20plus%20grasshopper/README.md). The app follows that logic: the boundary is drawn by hand, and the tracks are generated in code. See [PROCESS_DOCUMENTATION.md](PROCESS_DOCUMENTATION.md) for the development story.
 
 **Live demo: https://crop-field-drawing.web.app/**
 
@@ -80,7 +80,7 @@ The turns are drawn as a visual pattern: each intersection gets curves in both d
 ├── firebase-config.js       Firestore save/load helpers (commented out)
 ├── FIREBASE_DEPLOYMENT.md   Deployment guide
 ├── FIREBASE_QUICKSTART.md   Quick Firebase setup
-└── background/              Studio material the app continues (not deployed)
+└── background/              Pen-plot archive, plus the Rhino and Grasshopper source (not deployed)
 ```
 
 The Firebase pieces are optional and not wired up yet. The app runs entirely in the browser, and `.firebaserc` still has a placeholder project ID.
