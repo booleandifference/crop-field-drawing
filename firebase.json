@@ -9,7 +9,8 @@
       "functions/**",
       "*.md",
       "test.html",
-      "firebase-config.js"
+      "firebase-config.js",
+      "background/**"
     ]
   }
 }
